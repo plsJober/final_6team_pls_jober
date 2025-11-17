@@ -4,14 +4,13 @@ import com.example.dto.FastAPIResponseDto;
 import com.example.dto.TemplateRequestDto;
 import com.example.dto.TemplateValidationRequestDto;
 import com.example.dto.TemplateValidationResponseDto;
-import com.example.entity.Account;
 import com.example.dto.UserDto;
 import com.example.service.TemplateService;
-import com.example.service.UserService;
+import com.example.common.annotation.RequireAuth;
+import com.example.common.annotation.CurrentUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,16 +23,16 @@ import java.util.Map;
 public class TemplateController {
 
     private final TemplateService templateService;
-    private final UserService userService;
 
 
     /**
      * 템플릿을 검증합니다. (POST /api/template/validate)
      */
+    @RequireAuth
     @PostMapping("/template/validate")
     public ResponseEntity<?> validateTemplate(
             @Valid @RequestBody TemplateValidationRequestDto requestDto,
-            @AuthenticationPrincipal Account currentUser
+            @CurrentUser UserDto currentUser
     ) {
         try {
             log.info("템플릿 검증 요청 받음");
@@ -42,16 +41,9 @@ public class TemplateController {
                     requestDto.getVariableList() != null ? requestDto.getVariableList().size() : "null",
                     requestDto.getCategory());
             
-            if (currentUser == null) {
-                log.error("현재 사용자가 null입니다");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "인증되지 않은 사용자입니다"));
-            }
+            log.info("사용자 {}({})가 템플릿 검증을 요청했습니다.", currentUser.getUserName(), currentUser.getEmail());
             
-            UserDto userDto = userService.convertToUserDto(currentUser);
-            log.info("사용자 {}({})가 템플릿 검증을 요청했습니다.", userDto.getUserName(), userDto.getEmail());
-            
-            TemplateValidationResponseDto response = templateService.validateTemplate(requestDto, userDto);
+            TemplateValidationResponseDto response = templateService.validateTemplate(requestDto, currentUser);
             log.info("템플릿 검증 완료");
             return ResponseEntity.ok(response);
         } catch (Exception e) {

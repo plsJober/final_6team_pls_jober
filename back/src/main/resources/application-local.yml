@@ -4,14 +4,14 @@ spring:
 
   # 데이터베이스 설정
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: ${DB_DRIVER}
+    url: jdbc:mysql://localhost:3306/final_project
+    username: root
+    password: 1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
   # flyway 마이그레이션 설정
   flyway:
-    enabled: true
+    enabled: false
     baseline-on-migrate: true
     baseline-version: 0
     locations:
@@ -31,9 +31,9 @@ spring:
   # Redis 설정
   data:
     redis:
-      host: 158.179.169.48
+      host: 127.0.0.1           # Docker 컨테이너가 바인딩된 로컬 IP
       port: 6379
-      password: ${REDIS_PASSWORD:}
+      password: 1234            # Redis 컨테이너 생성 시 설정한 비밀번호
       database: 0
       timeout: 2000ms
       lettuce:
@@ -45,7 +45,7 @@ spring:
 
 # JWT 설정
 jwt:
-  secret: ${JWT_SECRET}  # 환경변수에서 필수로 설정해야 함
+  secret: 'your-very-secret-key-for-local-development-12345' # 고정된 시크릿 키
   access-expiration: 3600000     # 1시간 (ms)
   refresh-expiration: 604800000  # 7일 (ms)
 
@@ -66,4 +66,3 @@ logging:
 ai:
   fastapi:
     url: http://localhost:8000 #로컬 AI 서버 URL
-
