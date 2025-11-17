@@ -68,13 +68,13 @@ const formattedTemplateContent = computed(() => {
   // 1) 기본 템플릿
   if (!props.templateContent) {
     const defaultContent = `
-안녕하세요, #{고객명}님.
+안녕하세요, {{고객명}}님.
 
-#{서비스명} 이용과 관련하여 안내드립니다.
+{{서비스명}} 이용과 관련하여 안내드립니다.
 
-• 처리일시: #{처리일시}
-• 처리상태: #{처리상태}
-• 담당자: #{담당자명}
+• 처리일시: {{처리일시}}
+• 처리상태: {{처리상태}}
+• 담당자: {{담당자명}}
 
 문의사항이 있으신 경우 고객센터로 연락 부탁드립니다.
 
@@ -107,21 +107,12 @@ const formattedTemplateContent = computed(() => {
   console.log('showVariables:', props.showVariables)
   console.log('variableMapping:', props.variableMapping)
   
-  // 변수 패턴: ##{변수} 또는 {{변수}} 형태 모두 지원
-  const doubleHashPattern = /##\{([^}]+)\}/g  // ##{변수} 형태
+  // 변수 패턴: {{변수}} 형태만 사용
   const doubleBracePattern = /\{\{([^}]+)\}\}/g  // {{변수}} 형태
   
   if (props.showVariables) {
     // 변수를 하이라이트로 표시하되 원본 내용 보존
-    console.log('하이라이트 패턴 적용: ##{변수} 및 {{변수}}')
-    
-    // ##{변수} 형태 처리
-    content = content.replace(doubleHashPattern, (match, varName) => {
-      const variableName = varName.trim()
-      console.log(`변수 하이라이트: "##{${variableName}}"`)
-      // 원본 내용(##{변수})을 그대로 보여주되 하이라이트만 적용
-      return `<span class="variable-highlight" data-variable="${variableName}">##{${variableName}}</span>`
-    })
+    console.log('하이라이트 패턴 적용: {{변수}}')
     
     // {{변수}} 형태 처리
     content = content.replace(doubleBracePattern, (match, varName) => {

@@ -287,29 +287,19 @@ const extractVariablesFromTemplate = (template: string): string[] => {
   console.log('=== 변수 추출 시작 ===')
   console.log('템플릿 내용:', template)
   
-  // ##{변수} 또는 {{변수}} 형태 모두 인식
-  const doubleHashPattern = /##\{([^}]+)\}/g  // ##{변수} 형태
+  // {{변수}} 형태만 인식
   const doubleBracePattern = /\{\{([^}]+)\}\}/g  // {{변수}} 형태
   const found = new Set<string>()
   
-  console.log('변수 추출 패턴 적용: ##{변수} 및 {{변수}}')
-  
-  // ##{변수} 형태 추출
-  let m
-  while ((m = doubleHashPattern.exec(template)) !== null) {
-    const name = (m[1] || '').trim()
-    if (name) {
-      found.add(name)
-      console.log(`변수 발견 (##{형태}): "${name}"`)
-    }
-  }
+  console.log('변수 추출 패턴 적용: {{변수}}')
   
   // {{변수}} 형태 추출
+  let m
   while ((m = doubleBracePattern.exec(template)) !== null) {
     const name = (m[1] || '').trim()
     if (name) {
       found.add(name)
-      console.log(`변수 발견 ({{형태}}): "${name}"`)
+      console.log(`변수 발견: "${name}"`)
     }
   }
   
