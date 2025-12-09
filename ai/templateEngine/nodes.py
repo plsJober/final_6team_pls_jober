@@ -23,6 +23,27 @@ from templateEngine.prompts.builders import (
 
 logger = logging.getLogger(__name__)
 
+def clean_json_response(response: str) -> str:
+    """
+    AI 응답에서 마크다운 코드 블록을 제거하고 순수 JSON만 추출합니다.
+    
+    예: ```json\n{...}\n``` -> {...}
+    """
+    if not response:
+        return response
+    
+    # 앞뒤 공백 제거
+    cleaned = response.strip()
+    
+    # 마크다운 코드 블록 시작 부분 제거 (```json 또는 ```)
+    cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned, flags=re.MULTILINE)
+    
+    # 마크다운 코드 블록 끝 부분 제거 (```)
+    cleaned = re.sub(r'\n?```\s*$', '', cleaned, flags=re.MULTILINE)
+    
+    # 최종 앞뒤 공백 제거
+    return cleaned.strip()
+
 # --- [신규] 파이프라인 노드들 ---
 
 async def initial_analysis_node(state: TemplateGenerationState) -> Dict[str, Any]:
@@ -36,7 +57,9 @@ async def initial_analysis_node(state: TemplateGenerationState) -> Dict[str, Any
         try:
             prompt_builder = TypePromptBuilder(state["userMessage"])
             messages = prompt_builder.build()
-            return json.loads(await state["openai_service"].chat_completion(messages))
+            response = await state["openai_service"].chat_completion(messages)
+            cleaned_response = clean_json_response(response)
+            return json.loads(cleaned_response)
         except Exception as e:
             logger.error(f"❌ (병렬) 메시지 유형 분류 실패: {e}")
             return {"type": "BASIC", "explain_type": "분류 실패"}
@@ -61,7 +84,9 @@ async def initial_analysis_node(state: TemplateGenerationState) -> Dict[str, Any
 
             category_builder = CategoryPromptBuilder(state["userMessage"], current_categories)
             messages = category_builder.build()
-            result = json.loads(await state["openai_service"].chat_completion(messages))
+            response = await state["openai_service"].chat_completion(messages)
+            cleaned_response = clean_json_response(response)
+            result = json.loads(cleaned_response)
 
             CONFIDENCE_THRESHOLD = 70
             if result.get("is_appropriate") and result.get("confidence", 0) >= CONFIDENCE_THRESHOLD:
@@ -69,7 +94,9 @@ async def initial_analysis_node(state: TemplateGenerationState) -> Dict[str, Any
             else:
                 new_category_builder = NewCategoryPromptBuilder(state["userMessage"], current_categories)
                 messages = new_category_builder.build()
-                new_category_result = json.loads(await state["openai_service"].chat_completion(messages))
+                response = await state["openai_service"].chat_completion(messages)
+                cleaned_response = clean_json_response(response)
+                new_category_result = json.loads(cleaned_response)
                 new_category_name = new_category_result.get("new_category")
                 await category_service.create_category_if_not_exists(new_category_name)
                 
@@ -135,16 +162,32 @@ async def extract_blocks_node(state: TemplateGenerationState) -> Dict[str, Any]:
         block_builder = FieldsPromptBuilder(generated_template)
         block_messages = block_builder.build()
         block_response = await state["openai_service"].chat_completion(block_messages)
-        block_fields = json.loads(block_response)
-        logger.info(f"  ✅ 의미 블록 추출 성공: {list(block_fields.keys())}")
+        
+        # JSON 파싱 안전 처리
+        try:
+            cleaned_block_response = clean_json_response(block_response)
+            block_fields = json.loads(cleaned_block_response)
+            logger.info(f"  ✅ 의미 블록 추출 성공: {list(block_fields.keys())}")
+        except json.JSONDecodeError as e:
+            logger.error(f"  ❌ 의미 블록 JSON 파싱 실패: {e}")
+            logger.error(f"  📝 AI 응답 내용: {block_response}")
+            block_fields = {}
 
         # --- 2단계: '개별 변수' 추출 ---
         logger.info("  - (3-2) 개별 변수 추출 중...")
         variable_builder = IndividualVariableExtractor(generated_template)
         variable_messages = variable_builder.build()
         variable_response = await state["openai_service"].chat_completion(variable_messages)
-        individual_variables = json.loads(variable_response)
-        logger.info(f"  ✅ 개별 변수 추출 성공: {list(individual_variables.keys())}")
+        
+        # JSON 파싱 안전 처리
+        try:
+            cleaned_variable_response = clean_json_response(variable_response)
+            individual_variables = json.loads(cleaned_variable_response)
+            logger.info(f"  ✅ 개별 변수 추출 성공: {list(individual_variables.keys())}")
+        except json.JSONDecodeError as e:
+            logger.error(f"  ❌ 개별 변수 JSON 파싱 실패: {e}")
+            logger.error(f"  📝 AI 응답 내용: {variable_response}")
+            individual_variables = {}
 
         # --- 3단계: 두 결과 병합 ---
         # individual_variables를 먼저 두고, block_fields로 덮어씁니다.
@@ -259,9 +302,18 @@ def finalize_node(state: TemplateGenerationState) -> Dict[str, Any]:
     extracted_fields = state.get("extracted_fields", {})
 
     if not base_template_text or not extracted_fields:
-        # ... (기존 예외 처리 로직) ...
-        # 이 부분은 이전 답변의 코드를 그대로 사용하시면 됩니다.
-        pass
+        logger.warning("⚠️ 템플릿 텍스트나 추출된 필드가 없습니다.")
+        return {
+            "final_result": {
+                "pipeline_success": False,
+                "template_text": base_template_text or "",
+                "variable_mapping": extracted_fields,
+                "variables": list(extracted_fields.keys()) if extracted_fields else [],
+                "template_title": state.get("generated_title", "제목 없음"),
+                "message_type": state.get("message_type_result", {}).get("type"),
+                "category_sub": state.get("category_result", {}).get("category_sub"),
+            }
+        }
 
     # --- [핵심 로직] re.sub 콜백을 이용한 안전한 동시 치환 ---
 
@@ -271,21 +323,35 @@ def finalize_node(state: TemplateGenerationState) -> Dict[str, Any]:
     valid_sorted_values = [re.escape(v) for v in sorted_values if v]
 
     if not valid_sorted_values:
-        # ... (기존 예외 처리 로직) ...
-        pass
+        logger.warning("⚠️ 유효한 치환 값이 없습니다.")
+        return {
+            "final_result": {
+                "pipeline_success": True,
+                "template_text": base_template_text,
+                "variable_mapping": extracted_fields,
+                "variables": list(extracted_fields.keys()),
+                "template_title": state.get("generated_title", "제목 없음"),
+                "message_type": state.get("message_type_result", {}).get("type"),
+                "category_sub": state.get("category_result", {}).get("category_sub"),
+            }
+        }
 
     pattern = re.compile("|".join(valid_sorted_values))
 
     # 3. 치환 로직을 수행할 콜백 함수를 정의합니다.
     def create_variable_syntax(match):
         """
-        [최종 수정] 모든 변수를 안전한 '{{...}}' 형태로 통일하여 반환합니다.
+        매칭된 값을 해당하는 변수명으로 치환합니다.
         """
         matched_value = match.group(0)
-        # key = value_to_key_map.get(matched_value) # 이제 key를 찾을 필요도 없습니다.
-
-        # 모든 매칭된 값을 예외 없이 '{{...}}' 형태로 감쌉니다.
-        return f"{{{{{matched_value}}}}}"
+        key = value_to_key_map.get(matched_value)
+        
+        if key:
+            # 매칭된 값에 해당하는 변수가 있으면 변수명으로 치환
+            return f"{{{{{key}}}}}"
+        else:
+            # 매칭된 값에 해당하는 변수가 없으면 원본 유지
+            return matched_value
 
     # 4. re.sub를 단 한 번만 호출하여 모든 치환을 안전하게 수행합니다.
     final_template_with_vars = pattern.sub(create_variable_syntax, base_template_text)

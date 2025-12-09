@@ -86,6 +86,7 @@
                   :template-title="templateTitle"
                   :show-variables="showVariables"
                   :variables="editedVariables"
+                  :variable-mapping="templateVariableMapping"
                   :is-rejected="isRejected"
                   :problem-areas="problemAreas"
                   :highlighted-problem-area="currentProblemArea"
@@ -171,7 +172,7 @@ const userStore = useUserStore()
 const chatHistoryRef = ref<HTMLElement | null>(null)
 const kakaoPreviewRef = ref<HTMLElement | null>(null)
 
-const showVariables = ref(true)
+const showVariables = ref(false)
 const showRejectionSidebar = ref(false)
 const isRejected = ref(false)
 const currentProblemArea = ref<any>(null)
@@ -185,6 +186,7 @@ const modifiedAreas = ref<Set<string>>(new Set()) // 수정된 영역 ID 추적
 const templateContent = ref('')
 const templateTitle = ref('')
 const templateVariables = ref<any[]>([])
+const templateVariableMapping = ref<Record<string, string>>({})
 const templateCategory = ref('')
 const userMessage = ref('')
 
@@ -282,16 +284,30 @@ const editedVariables = ref<string[]>([])
 
 // 변수 추출 함수 (공통 로직)
 const extractVariablesFromTemplate = (template: string): string[] => {
-  const patterns = [/\{\{([^}]+)\}\}/g, /#\{([^}]+)\}/g, /\{([^}]+)\}/g]
+  console.log('=== 변수 추출 시작 ===')
+  console.log('템플릿 내용:', template)
+  
+  // {{변수}} 형태만 인식
+  const doubleBracePattern = /\{\{([^}]+)\}\}/g  // {{변수}} 형태
   const found = new Set<string>()
-  patterns.forEach((re) => {
-    let m
-    while ((m = re.exec(template)) !== null) {
-      const name = (m[1] || '').trim()
-      if (name) found.add(name)
+  
+  console.log('변수 추출 패턴 적용: {{변수}}')
+  
+  // {{변수}} 형태 추출
+  let m
+  while ((m = doubleBracePattern.exec(template)) !== null) {
+    const name = (m[1] || '').trim()
+    if (name) {
+      found.add(name)
+      console.log(`변수 발견: "${name}"`)
     }
-  })
-  return Array.from(found)
+  }
+  
+  const result = Array.from(found)
+  console.log('추출된 변수 목록:', result)
+  console.log('=== 변수 추출 완료 ===')
+  
+  return result
 }
 
 // 변수 배열 보정 함수 (공통 로직)
@@ -352,6 +368,13 @@ onMounted(() => {
       
       // 변수명 초기화
       editedVariables.value = [...templateVariables.value]
+      
+      // 변수 매핑은 백엔드에서만 제공 (자동 생성하지 않음)
+      // 사용자가 미리보기를 보고 직접 수정할 수 있도록 변수명을 그대로 표시
+      if (!templateVariableMapping.value || Object.keys(templateVariableMapping.value).length === 0) {
+        templateVariableMapping.value = {}
+        console.log('변수 매핑이 없어서 빈 객체로 설정 (백엔드에서 제공해야 함)')
+      }
       
       // 버전 1에 초기 템플릿 저장
       versionTemplates.value[1] = {
@@ -1393,6 +1416,17 @@ const sendMessage = async () => {
     const newTemplateContent = response.data.modified_template || response.data.template_text || templateContent.value
     const templateChanged = newTemplateContent !== templateContent.value
     templateContent.value = newTemplateContent
+    
+    // 변수 매핑 저장 (백엔드에서 전달)
+    if (response.data.variable_mapping) {
+      templateVariableMapping.value = response.data.variable_mapping
+    } else {
+      // 백엔드에서 변수 매핑이 없으면 빈 객체로 설정
+      // 사용자가 미리보기를 보고 직접 수정할 수 있도록 변수명을 그대로 표시
+      templateVariableMapping.value = {}
+      console.log('변수 매핑이 없어서 빈 객체로 설정 (백엔드에서 제공해야 함)')
+    }
+    
     // 변수 처리 - 백엔드에서 variables 필드 사용
     if (response.data.variables && Array.isArray(response.data.variables)) {
       templateVariables.value = response.data.variables.map((variable: any) => 
@@ -1526,7 +1560,7 @@ const scrollToBottom = () => {
   flex: 1; /* 남은 공간을 모두 차지 */
   overflow: visible;
   width: 100%;
-  height:70vh;
+  height: calc(80vh - 8vh); /* 전체 높이에서 버튼 영역 높이를 뺀 값 */
   justify-content: center;
   align-items: flex-start; /* 자식 요소들을 상단 정렬 */
 }
@@ -1540,7 +1574,7 @@ const scrollToBottom = () => {
 .kakao-preview-wrapper {
   flex-shrink: 0;
   align-self: flex-start; /* 상단 정렬 */
-  max-height: 80vh; /* 최대 높이 제한 */
+  max-height: 65vh; /* 최대 높이 제한을 줄여서 버튼 영역 확보 */
   overflow-y: auto;
   padding-right: 0.5rem;
   min-width: 20rem; /* 최소 너비 보장 */
@@ -1873,8 +1907,9 @@ const scrollToBottom = () => {
   justify-content: space-between;
   align-items: end;
   width:100%;
-  height:5vw;
+  height:8vh; /* vh 단위로 변경하여 더 안정적인 높이 설정 */
   padding:0 1vw;
+  flex-shrink: 0; /* 버튼 영역이 축소되지 않도록 고정 */
 }
 
 /* 정정 횟수 표시 */
