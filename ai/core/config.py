@@ -3,7 +3,8 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # MySQL 데이터베이스 설정
-    DB_URL: str = "jdbc:mysql://138.2.119.75:3306/final_project?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul"
+    # 로컬 개발 기본값 (환경변수로 자유롭게 덮어쓰기 가능)
+    DB_URL: str = "jdbc:mysql://localhost:3306/final_project?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul"
     DB_USERNAME: str = "root"
     DB_PASSWORD: str = ""
 
@@ -15,8 +16,8 @@ class Settings(BaseSettings):
     # OpenAI 설정
     OPENAI_API_KEY: str
 
-    # ChromaDB 설정
-    CHROMA_DB_HOST: str = "138.2.119.75"
+    # ChromaDB 설정 (로컬 개발 기본값)
+    CHROMA_DB_HOST: str = "localhost"
     CHROMA_DB_PORT: int = 8001
 
     # 카테고리 관련 설정
