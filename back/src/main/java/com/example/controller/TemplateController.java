@@ -5,6 +5,8 @@ import com.example.dto.TemplateRequestDto;
 import com.example.dto.TemplateValidationRequestDto;
 import com.example.dto.TemplateValidationResponseDto;
 import com.example.dto.UserDto;
+import com.example.dto.TemplateSaveRequestDto;
+import com.example.dto.TemplateSaveResponseDto;
 import com.example.service.TemplateService;
 import com.example.common.annotation.RequireAuth;
 import com.example.common.annotation.CurrentUser;
@@ -50,6 +52,36 @@ public class TemplateController {
             log.error("템플릿 검증 중 오류 발생", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "템플릿 검증 중 오류가 발생했습니다: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 템플릿을 저장합니다. (POST /api/template/save)
+     */
+    @RequireAuth
+    @PostMapping("/template/save")
+    public ResponseEntity<TemplateSaveResponseDto> saveTemplate(
+            @Valid @RequestBody TemplateSaveRequestDto requestDto,
+            @CurrentUser UserDto currentUser
+    ) {
+        try {
+            log.info("템플릿 저장 요청 - 사용자: {}({}), 카테고리: {}, 제목: {}",
+                    currentUser.getUserName(),
+                    currentUser.getEmail(),
+                    requestDto.getCategory(),
+                    requestDto.getTemplateTitle());
+
+            TemplateSaveResponseDto response = templateService.saveTemplate(requestDto, currentUser);
+
+            if (response.isSuccess()) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            log.error("템플릿 저장 중 오류 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(TemplateSaveResponseDto.failure("템플릿 저장 중 오류가 발생했습니다: " + e.getMessage()));
         }
     }
 

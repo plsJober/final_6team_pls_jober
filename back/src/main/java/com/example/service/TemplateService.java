@@ -24,11 +24,15 @@ public class TemplateService {
     private final AccountRepository accountRepository;
     private final AIService aiService; // FastAPI 통신을 전담할 서비스 주입
 
-
     // 수정에서 제출하기 버튼 클릭 시 템플릿 저장
     @Transactional
     public TemplateSaveResponseDto saveTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
         try {
+            // templateId가 있으면 업데이트, 없으면 신규 생성
+            if (requestDto.getTemplateId() != null) {
+                return updateExistingTemplate(requestDto, currentUser);
+            }
+
             // 사용자 계정 조회
             Account account = accountRepository.findById(currentUser.getAccountId())
                     .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
@@ -77,6 +81,45 @@ public class TemplateService {
             log.error("템플릿 저장 중 오류 발생", e);
             return TemplateSaveResponseDto.failure("템플릿 저장 중 오류가 발생했습니다: "+e.getMessage());
         }
+    }
+
+    private TemplateSaveResponseDto updateExistingTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
+        Template template = templateRepository.findById(requestDto.getTemplateId())
+                .orElseThrow(() -> new ResourceNotFoundException("템플릿을 찾을 수 없습니다."));
+
+        // 소유자 확인
+        if (!template.getAccount().getId().equals(currentUser.getAccountId())) {
+            return TemplateSaveResponseDto.failure("템플릿 소유자가 아닙니다.");
+        }
+
+        // 카테고리 갱신
+        Category category = findCategoryByName(requestDto.getCategory());
+
+        // 기본 필드 업데이트
+        template.setTemplateContent(requestDto.getTemplateContent());
+        template.setCategory(category);
+        template.setUserMessage(requestDto.getUserMessage());
+        template.setAutoTitle(requestDto.getTemplateTitle());
+        template.setStatus("검증 중");
+
+        // 변수 업데이트: 기존 변수 삭제 후 재생성
+        template.getVariables().clear();
+        if (requestDto.getVariableList() != null && !requestDto.getVariableList().isEmpty()) {
+            requestDto.getVariableList().stream()
+                    .filter(variableMap -> variableMap != null &&
+                            variableMap.get("variableKey") != null &&
+                            !variableMap.get("variableKey").trim().isEmpty())
+                    .forEach(variableMap -> {
+                        String variableKey = variableMap.get("variableKey").trim();
+                        Var variable = Var.builder()
+                                .variableKey(variableKey)
+                                .build();
+                        template.addVariable(variable);
+                    });
+        }
+
+        Template saved = templateRepository.save(template);
+        return TemplateSaveResponseDto.success(saved.getTemplateId().toString());
     }
 
 

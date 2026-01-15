@@ -12,6 +12,9 @@ import java.util.Map;
 @Getter
 @Setter
 public class TemplateSaveRequestDto {
+    @JsonProperty("templateId")
+    private Long templateId;
+
     @JsonProperty("templateContent")
     private String templateContent;
     

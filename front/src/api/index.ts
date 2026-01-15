@@ -189,12 +189,12 @@ export const templateApi = {
     return api.post('/template/modify', modificationRequest)
   },
 
-  // 템플릿 저장 (검증 없이 바로 저장)
-  saveTemplate: (templateContent: string, variableList: string[], category: string, userMessage: string, templateTitle: string) => {
+  // 템플릿 저장 (검증 없이 바로 저장, templateId가 있으면 업데이트)
+  saveTemplate: (templateContent: string, variableList: string[], category: string, userMessage: string, templateTitle: string, templateId?: string) => {
     // variableList를 딕셔너리 배열로 변환
     const variableDictList = convertToStringArray(variableList)
 
-    const saveRequest = {
+    const saveRequest: any = {
       templateContent: templateContent,
       variableList: variableDictList,  // 딕셔너리 배열로 전달
 
@@ -203,6 +203,9 @@ export const templateApi = {
       templateTitle: templateTitle
     }
 
+    if (templateId) {
+      saveRequest.templateId = templateId
+    }
 
     return api.post('/template/save', saveRequest)
   },

@@ -96,6 +96,28 @@ const handleSubmit = async () => {
       category: responseData.category || '기타',
       userMessage: templateStore.userMessage
     }));
+
+    // 1차 저장: 생성 직후 백엔드에 임시 저장하여 templateId 확보
+    try {
+      const saveResponse = await templateApi.saveTemplate(
+        responseData.template_content,
+        variableNames,
+        responseData.category || '기타',
+        templateStore.userMessage,
+        responseData.template_title || ''
+      )
+
+      if (saveResponse.data?.success && saveResponse.data?.templateId) {
+        sessionStorage.setItem('templateId', saveResponse.data.templateId)
+      } else {
+        alert('초기 템플릿 저장에 실패했습니다. 다시 시도해주세요.')
+        return
+      }
+    } catch (saveError) {
+      console.error('초기 템플릿 저장 실패:', saveError)
+      alert('초기 템플릿 저장에 실패했습니다. 다시 시도해주세요.')
+      return
+    }
     
     // 새 템플릿 생성 시 수정 횟수 초기화 (10번으로 설정)
     sessionStorage.setItem('template_modifications_new', '10')
