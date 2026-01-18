@@ -17,6 +17,7 @@ public class MyPageService {
 
     private final AccountRepository accountRepository;
     private final PasswordService passwordService;
+    private final AccountCacheService accountCacheService;
 
     // UserDto를 DTO로 변환
     @Transactional(readOnly = true)
@@ -37,6 +38,8 @@ public class MyPageService {
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
         user.setUserName(req.getName().trim());
         accountRepository.save(user);
+
+        accountCacheService.evictAccountCache(user.getId());
 
         // UserDto 정보로 응답 생성
         return toUserInfoResponse(currentUser);
@@ -68,6 +71,8 @@ public class MyPageService {
         accountRepository.save(user);
         // ToDo: 자격증명 버전 증가
 
+        accountCacheService.evictAccountCache(user.getId());
+
         return toUserInfoResponse(currentUser);
     }
 
@@ -87,6 +92,7 @@ public class MyPageService {
         user.setPasswordHash(passwordService.encode(req.getNewPassword()));
         accountRepository.save(user);
 
+        accountCacheService.evictAccountCache(user.getId());
         // 비밀번호 변경 후에도 기존 토큰 무효화를 위해 버전 증가
         // ToDo: 자격증명 버전 증가
     }
