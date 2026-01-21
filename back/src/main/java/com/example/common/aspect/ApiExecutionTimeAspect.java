@@ -11,23 +11,35 @@ import org.springframework.stereotype.Component;
 @Component
 public class ApiExecutionTimeAspect {
 
-    @Around("execution(* com.example..controller..*(..))")
-    public Object measureApiExecutionTime(ProceedingJoinPoint joinPoint) throws Throwable {
+    private static final long SLOW_API_THRESHOLD_MS = 500;
 
+    @Around("execution(* com.example..controller..*(..))")
+    public Object measureApiTime(ProceedingJoinPoint joinPoint) throws Throwable {
         long start = System.currentTimeMillis();
 
         try {
             return joinPoint.proceed();
         } finally {
-            long end = System.currentTimeMillis();
-            long duration = end - start;
+            long duration = System.currentTimeMillis() - start;
 
-            log.info(
-                    "API 실행 시간 | {}.{}() | {} ms",
-                    joinPoint.getSignature().getDeclaringTypeName(),
-                    joinPoint.getSignature().getName(),
-                    duration
-            );
+            String className = joinPoint.getSignature().getDeclaringTypeName();
+            String methodName = joinPoint.getSignature().getName();
+
+            if (duration >= SLOW_API_THRESHOLD_MS) {
+                log.warn(
+                        "[SLOW-API] {}.{} took {} ms",
+                        className,
+                        methodName,
+                        duration
+                );
+            } else {
+                log.info(
+                        "[API] {}.{} took {} ms",
+                        className,
+                        methodName,
+                        duration
+                );
+            }
         }
     }
 }
