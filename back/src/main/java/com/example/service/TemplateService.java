@@ -28,11 +28,6 @@ public class TemplateService {
     @Transactional
     public TemplateSaveResponseDto saveTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
         try {
-            // templateId가 있으면 업데이트, 없으면 신규 생성
-            if (requestDto.getTemplateId() != null) {
-                return updateExistingTemplate(requestDto, currentUser);
-            }
-
             // 사용자 계정 조회
             Account account = accountRepository.findById(currentUser.getAccountId())
                     .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
