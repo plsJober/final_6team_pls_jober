@@ -17,6 +17,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -49,8 +51,8 @@ public class TemplateController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("템플릿 검증 중 오류 발생", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "템플릿 검증 중 오류가 발생했습니다: " + e.getMessage()));
+            TemplateValidationResponseDto response = templateService.validateTemplate(requestDto, currentUser);
+            return ResponseEntity.ok(response);
         }
     }
 
