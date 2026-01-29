@@ -86,8 +86,24 @@ const handleSubmit = async () => {
     // AI 서버의 응답을 sessionStorage에 저장합니다.
     const responseData = response.data;
 
-    // AI가 반환한 variables는 이미 문자열 배열입니다.
-    const variableNames = responseData.variables || [];
+    // 템플릿 내용에서 실제로 사용된 변수만 추출 ({{변수}} 형태)
+    const extractVariablesFromTemplate = (template: string): string[] => {
+      const doubleBracePattern = /\{\{([^}]+)\}\}/g
+      const found = new Set<string>()
+      
+      let m
+      while ((m = doubleBracePattern.exec(template)) !== null) {
+        const name = (m[1] || '').trim()
+        if (name) {
+          found.add(name)
+        }
+      }
+      
+      return Array.from(found)
+    }
+
+    // 템플릿 내용에서 실제 사용된 변수만 추출 (중복 자동 제거)
+    const variableNames = extractVariablesFromTemplate(responseData.template_content || '')
 
     sessionStorage.setItem('generatedTemplate', JSON.stringify({
       templateContent: responseData.template_content,
@@ -99,7 +115,7 @@ const handleSubmit = async () => {
 
     // 1차 저장: 생성 직후 백엔드에 임시 저장하여 templateId 확보
     try {
-      const saveResponse = await templateApi.saveTemplate(
+      const saveResponse = await templateApi.createTemplate(
         responseData.template_content,
         variableNames,
         responseData.category || '기타',

@@ -1397,13 +1397,18 @@ const saveTemplate = async () => {
 
     // 1단계: 먼저 템플릿 저장
     console.log('1단계: 템플릿 저장 시작')
+    const currentTemplateId = templateId.value || sessionStorage.getItem('templateId')
+    if (!currentTemplateId) {
+      alert('템플릿 ID가 없습니다. 템플릿을 먼저 생성해주세요.')
+      return
+    }
     const saveResponse = await templateApi.saveTemplate(
       templateContent.value,
       editedVariables.value,
       templateCategory.value,
       userMessage.value,
       templateTitle.value,
-      templateId.value || sessionStorage.getItem('templateId') || undefined
+      currentTemplateId
     )
     
     console.log('템플릿 저장 응답:', saveResponse.data)

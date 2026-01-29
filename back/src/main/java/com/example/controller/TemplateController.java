@@ -16,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -32,7 +31,7 @@ public class TemplateController {
      */
     @RequireAuth
     @PostMapping("/template/validate")
-    public ResponseEntity<?> validateTemplate(
+    public ResponseEntity<TemplateValidationResponseDto> validateTemplate(
             @Valid @RequestBody TemplateValidationRequestDto requestDto,
             @CurrentUser UserDto currentUser
     ) {
@@ -56,7 +55,28 @@ public class TemplateController {
     }
 
     /**
-     * 템플릿을 저장합니다. (POST /api/template/save)
+     * 템플릿 신규 생성 (POST /api/template/create)
+     * 생성하기 직후 1차 저장용
+     */
+    @RequireAuth
+    @PostMapping("/template/create")
+    public ResponseEntity<TemplateSaveResponseDto> createTemplate(
+            @Valid @RequestBody TemplateSaveRequestDto requestDto,
+            @CurrentUser UserDto currentUser
+    ) {
+        log.info("템플릿 신규 생성 요청 - 사용자: {}({}), 카테고리: {}, 제목: {}",
+                currentUser.getUserName(),
+                currentUser.getEmail(),
+                requestDto.getCategory(),
+                requestDto.getTemplateTitle());
+
+        TemplateSaveResponseDto response = templateService.upsertTemplate(requestDto, currentUser);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 템플릿 업데이트 (POST /api/template/save)
+     * templateId 필수, 기존 템플릿만 업데이트 가능
      */
     @RequireAuth
     @PostMapping("/template/save")
@@ -65,14 +85,13 @@ public class TemplateController {
             @CurrentUser UserDto currentUser
     ) {
         try {
-            log.info("템플릿 저장 요청 - 사용자: {}({}), 카테고리: {}, 제목: {}",
+            log.info("템플릿 업데이트 요청 - 사용자: {}({}), 카테고리: {}, 제목: {}",
                     currentUser.getUserName(),
                     currentUser.getEmail(),
                     requestDto.getCategory(),
                     requestDto.getTemplateTitle());
 
-            TemplateSaveResponseDto response = templateService.saveTemplate(requestDto, currentUser);
-
+            TemplateSaveResponseDto response = templateService.upsertTemplate(requestDto, currentUser);
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response);
             } else {

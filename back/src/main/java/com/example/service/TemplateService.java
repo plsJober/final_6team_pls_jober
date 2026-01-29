@@ -23,98 +23,90 @@ public class TemplateService {
     private final CategoryRepository categoryRepository;
     private final AccountRepository accountRepository;
     private final AIService aiService; // FastAPI 통신을 전담할 서비스 주입
+    private final TemplateVariableResolver variableResolver; // 변수 처리 유틸리티
 
-    // 수정에서 제출하기 버튼 클릭 시 템플릿 저장
+    /**
+     * 템플릿을 생성하거나 업데이트합니다 (upsert).
+     * templateId가 null이면 신규 생성, 있으면 업데이트합니다.
+     */
     @Transactional
-    public TemplateSaveResponseDto saveTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
-        try {
-            // 사용자 계정 조회
-            Account account = accountRepository.findById(currentUser.getAccountId())
-                    .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+    public TemplateSaveResponseDto upsertTemplate(TemplateSaveRequestDto dto, UserDto user) {
+        log.info("Template upsert: id={}, accountId={}, category={}",
+                dto.getTemplateId(), user.getAccountId(), dto.getCategory());
 
-            // 카테고리 조회
-            Category category = findCategoryByName(requestDto.getCategory());
+        Account account = accountRepository.findById(user.getAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
 
-            // Template 생성
-            Template template = Template.builder()
-                    .account(account)
-                    .templateContent(requestDto.getTemplateContent())
-                    .category(category)
-                    .userMessage(requestDto.getUserMessage()) // 사용자 원본 요청 저장
-                    .autoTitle(requestDto.getTemplateTitle()) // 템플릿 제목 저장
-                    .status("검증 중")
-                    .build();
+        Template template = (dto.getTemplateId() == null)
+                ? Template.builder().account(account).status("임시 저장").build()
+                : templateRepository.findById(dto.getTemplateId())
+                        .orElseThrow(() -> new ResourceNotFoundException("템플릿을 찾을 수 없습니다."));
 
-            if (requestDto.getVariableList() != null && !requestDto.getVariableList().isEmpty()) {
-                // 딕셔너리 배열에서 유효한 변수만 필터링
-                List<Map<String, String>> validVariables = requestDto.getVariableList().stream()
-                        .filter(variableMap -> variableMap != null && 
-                                variableMap.get("variableKey") != null && 
-                                !variableMap.get("variableKey").trim().isEmpty())
-                        .toList();
-                
-                if (!validVariables.isEmpty()) {
-                    for (Map<String, String> variableMap : validVariables) {
-                        String variableKey = variableMap.get("variableKey").trim(); // 앞뒤 공백 제거
-                        Var variable = Var.builder()
-                            .variableKey(variableKey)
-                            .build();
-                        template.addVariable(variable);
-                    }
-                }
-            }
-
-            // DB 저장
-            Template savedTemplate = templateRepository.save(template);
-            
-            // 카테고리 사용량 증가
-            incrementCategoryUsageCount(requestDto.getCategory());
-            
-
-            return TemplateSaveResponseDto.success(savedTemplate.getTemplateId().toString());
-        } catch (Exception e) {
-            log.error("템플릿 저장 중 오류 발생", e);
-            return TemplateSaveResponseDto.failure("템플릿 저장 중 오류가 발생했습니다: "+e.getMessage());
-        }
-    }
-
-    private TemplateSaveResponseDto updateExistingTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
-        Template template = templateRepository.findById(requestDto.getTemplateId())
-                .orElseThrow(() -> new ResourceNotFoundException("템플릿을 찾을 수 없습니다."));
-
-        // 소유자 확인
-        if (!template.getAccount().getId().equals(currentUser.getAccountId())) {
-            return TemplateSaveResponseDto.failure("템플릿 소유자가 아닙니다.");
+        // 소유권 체크는 update일 때만
+        if (dto.getTemplateId() != null && !template.getAccount().getId().equals(user.getAccountId())) {
+            throw new IllegalArgumentException("템플릿 소유자가 아닙니다.");
         }
 
-        // 카테고리 갱신
-        Category category = findCategoryByName(requestDto.getCategory());
+        Category category = findCategoryByName(dto.getCategory());
 
-        // 기본 필드 업데이트
-        template.setTemplateContent(requestDto.getTemplateContent());
-        template.setCategory(category);
-        template.setUserMessage(requestDto.getUserMessage());
-        template.setAutoTitle(requestDto.getTemplateTitle());
-        template.setStatus("검증 중");
-
-        // 변수 업데이트: 기존 변수 삭제 후 재생성
-        template.getVariables().clear();
-        if (requestDto.getVariableList() != null && !requestDto.getVariableList().isEmpty()) {
-            requestDto.getVariableList().stream()
-                    .filter(variableMap -> variableMap != null &&
-                            variableMap.get("variableKey") != null &&
-                            !variableMap.get("variableKey").trim().isEmpty())
-                    .forEach(variableMap -> {
-                        String variableKey = variableMap.get("variableKey").trim();
-                        Var variable = Var.builder()
-                                .variableKey(variableKey)
-                                .build();
-                        template.addVariable(variable);
-                    });
-        }
+        applyTemplateFields(template, dto, category, dto.getTemplateId() == null);
+        syncVariables(template, dto);
 
         Template saved = templateRepository.save(template);
+
+        incrementCategoryUsageCount(dto.getCategory());
+        log.info("Template upsert 완료: id={}", saved.getTemplateId());
         return TemplateSaveResponseDto.success(saved.getTemplateId().toString());
+    }
+
+    /**
+     * 템플릿 필드를 업데이트합니다.
+     */
+    private void applyTemplateFields(Template template, TemplateSaveRequestDto dto, Category category, boolean isCreate) {
+        template.setTemplateContent(dto.getTemplateContent());
+        template.setCategory(category);
+        template.setUserMessage(dto.getUserMessage());
+        template.setAutoTitle(dto.getTemplateTitle());
+        template.setStatus(isCreate ? "임시 저장" : "검증 중");
+    }
+
+    /**
+     * 템플릿의 변수를 동기화합니다.
+     * 템플릿에 실제로 사용된 변수만 저장합니다.
+     */
+    private void syncVariables(Template template, TemplateSaveRequestDto dto) {
+        Set<String> actual = variableResolver.extractActualVariables(dto.getTemplateContent());
+        List<String> keys = variableResolver.resolveKeys(dto.getVariableList());
+        List<String> used = variableResolver.filterOnlyUsed(keys, actual);
+
+        log.debug("VariableList raw size={}", dto.getVariableList() != null ? dto.getVariableList().size() : 0);
+        log.info("Resolved vars: actual={}, requested={}, used={}", actual.size(), keys.size(), used.size());
+
+        template.replaceVariables(used);
+    }
+
+    /**
+     * 템플릿 신규 생성 (1차 저장용)
+     * @deprecated upsertTemplate을 사용하세요
+     */
+    @Deprecated
+    @Transactional
+    public TemplateSaveResponseDto createTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
+        return upsertTemplate(requestDto, currentUser);
+    }
+
+    /**
+     * 템플릿 업데이트 (최종 저장용)
+     * templateId 필수
+     * @deprecated upsertTemplate을 사용하세요
+     */
+    @Deprecated
+    @Transactional
+    public TemplateSaveResponseDto saveTemplate(TemplateSaveRequestDto requestDto, UserDto currentUser) {
+        if (requestDto.getTemplateId() == null) {
+            throw new IllegalArgumentException("템플릿 ID가 필요합니다. 업데이트하려면 templateId를 제공해주세요.");
+        }
+        return upsertTemplate(requestDto, currentUser);
     }
 
 
@@ -125,7 +117,6 @@ public class TemplateService {
     @Transactional
     public TemplateValidationResponseDto validateTemplate(TemplateValidationRequestDto requestDto, UserDto currentUser) {
         try {
-
             // AI 서버로 검증 요청
             Map<String, Object> validationRequest = new HashMap<>();
             validationRequest.put("user_input", requestDto.getTemplateContent());
@@ -195,17 +186,6 @@ public class TemplateService {
         }
     }
 
-    private boolean isValidationSuccessful(Map<String, Object> aiValidationResult) {
-        Object success = aiValidationResult.get("success");
-        if (success instanceof Boolean) {
-            return (Boolean) success;
-        }
-        Object isValid = aiValidationResult.get("is_valid");
-        if (isValid instanceof Boolean) {
-            return (Boolean) isValid;
-        }
-        return false;
-    }
 
     // 검증에서 저장 기능 제거됨 - 수정에서만 저장
     // private TemplateValidationResponseDto handleApproval(TemplateValidationRequestDto requestDto, UserDto currentUser) {
