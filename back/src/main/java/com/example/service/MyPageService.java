@@ -50,7 +50,7 @@ public class MyPageService {
 
         // 1) 현재 비밀번호 재검증 (평문 vs 해시 → matches)
 
-        if (!passwordEncoder.matches(req.getCurrentPassword(), user.getPasswordHash())) {
+        if (!passwordService.matches(req.getCurrentPassword(), user.getPasswordHash())) {
             throw new UserException(UserErrorCode.INVALID_EMAIL_PASSWORD);
 
         }
@@ -78,7 +78,7 @@ public class MyPageService {
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
 
         // 현재 비밀번호 검증 (절대 평문과 해시를 equals 비교하지 말 것!)
-        if (!passwordEncoder.matches(req.getCurrentPassword(), user.getPasswordHash())) {
+        if (!passwordService.matches(req.getCurrentPassword(), user.getPasswordHash())) {
             throw new UserException(UserErrorCode.INVALID_EMAIL_PASSWORD);
 
         }
