@@ -14,9 +14,7 @@ public class ExecutionMetricCollector {
     public void collect(ExecutionMetric metric) {
         metrics.add(metric);
     }
-
     public List<ExecutionMetric> getAll() {
         return List.copyOf(metrics);
     }
 }
-
